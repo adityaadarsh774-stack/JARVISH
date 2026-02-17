@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TASK WITH ADI — Orbital Intelligence Matrix</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.2/dist/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00ff9f;
+            --secondary: #ff006e;
+            --accent: #00d4ff;
+            --warn: #ff9500;
+            --success: #00ff88;
+            --danger: #ff3366;
+            --bg: #0a0e27;
+            --surface: #0f1535;
+            --text: #e2e8f0;
+            --glow-primary: rgba(0, 255, 159, 0.3);
+            --glow-secondary: rgba(0, 212, 255, 0.3);
+            --transition: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        html, body {
+            height: 100%;
+            background: var(--bg);
+            font-family: 'Courier New', monospace;
+            color: var(--text);
+            overflow: hidden;
+            perspective: 1000px;
+        }
+
+        /* === BOOT SEQUENCE === */
+        .boot-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(180deg, #0a0e27 0%, #1a0f3a 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.6s ease;
+        }
+
+        .boot-container.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .neural-logo {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            margin-bottom: 40px;
+            filter: drop-shadow(0 0 30px rgba(0, 255, 159, 0.5));
+        }
+
+        .neural-logo canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .boot-text {
+            position: absolute;
+            bottom: 100px;
+            text-align: center;
+            width: 100%;
+        }
+
+        .status-line {
+            font-size: 12px;
+            color: #00ff9f;
+            margin: 8px 0;
+            font-weight: bold;
+            letter-spacing: 2px;
+            opacity: 0;
+            animation: fadeInOut 0.5s ease forwards;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; }
+            20% { opacity: 1; }
+            80% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        .progress-bar {
+            width: 300px;
+            height: 3px;
+            background: rgba(0, 255, 159, 0.1);
+            margin: 20px auto;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00ff9f, #00d4ff);
+            width: 0%;
+            animation: fillProgress 3s ease-in-out forwards;
+            box-shadow: 0 0 20px #00ff9f;
+        }
+
+        @keyframes fillProgress {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        .big-bang {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .big-bang.active {
+            animation: bangExplosion 0.8s ease-out forwards;
+        }
+
+        @keyframes bangExplosion {
+            0% {
+                width: 2px;
+                height: 2px;
+                opacity: 1;
+                box-shadow: 0 0 100px #00ff9f;
+            }
+            100% {
+                width: 400px;
+                height: 400px;
+                opacity: 0;
+                box-shadow: 0 0 0 rgba(0, 255, 159, 0);
+            }
+        }
+
+        /* === MAIN INTERFACE === */
+        #universe-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .orbital-hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .hud-panel {
+            position: absolute;
+            background: rgba(15, 21, 53, 0.85);
+            backdrop-filter: blur(20px);
+            border: 2px solid var(--glow-primary);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px var(--glow-primary), inset 0 0 30px rgba(0, 255, 159, 0.1);
+            color: var(--text);
+            font-size: 12px;
+            pointer-events: auto;
+            max-width: 400px;
+            transform: perspective(1000px) rotateY(0deg) rotateX(0deg);
+            transition: all 0.3s ease;
+        }
+
+        .hud-panel:hover {
+            box-shadow: 0 0 50px var(--glow-primary), inset 0 0 50px rgba(0, 255, 159, 0.2);
+            transform: perspective(1000px) rotateY(-2deg) rotateX(2deg) translateZ(10px);
+        }
+
+        .hud-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #00ff9f;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #00ff9f;
+        }
+
+        .adi-brand {
+            position: fixed;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 200;
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #00ff9f, #00d4ff, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 4px;
+            animation: glitch 0.3s ease-in-out;
+            filter: drop-shadow(0 0 20px rgba(0, 255, 159, 0.5));
+            text-transform: uppercase;
+        }
+
+        @keyframes glitch {
+            0% { text-shadow: 3px 0 #ff006e, -3px 0 #00d4ff; }
+            50% { text-shadow: -3px 0 #ff006e, 3px 0 #00d4ff; }
+            100% { text-shadow: 0 0 #ff006e, 0 0 #00d4ff; }
+        }
+
+        .task-input-panel {
+            position: fixed;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 600px;
+            z-index: 200;
+        }
+
+        .task-input-field {
+            width: 100%;
+            background: rgba(15, 21, 53, 0.9);
+            border: 2px solid var(--glow-primary);
+            border-radius: 6px;
+            padding: 16px 20px;
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            outline: none;
+            box-shadow: 0 0 20px var(--glow-primary), inset 0 0 20px rgba(0, 255, 159, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .task-input-field:focus {
+            box-shadow: 0 0 40px var(--glow-primary), inset 0 0 30px rgba(0, 255, 159, 0.1);
+            border-color: #00d4ff;
+        }
+
+        .task-input-field::placeholder {
+            color: rgba(226, 232, 240, 0.3);
+        }
+
+        .tasks-list-panel {
+            position: fixed;
+            top: 120px;
+            left: 40px;
+            width: 380px;
+            max-height: 500px;
+            overflow-y: auto;
+            z-index: 150;
+        }
+
+        .task-orb {
+            position: relative;
+            background: rgba(15, 21, 53, 0.8);
+            border: 2px solid var(--glow-secondary);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: grab;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px var(--glow-secondary), inset 0 0 20px rgba(0, 212, 255, 0.05);
+            animation: particleFormation 0.6s ease-out;
+        }
+
+        @keyframes particleFormation {
+            0% {
+                opacity: 0;
+                transform: scale(0.5) rotateZ(45deg);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) rotateZ(0deg);
+            }
+        }
+
+        .task-orb:hover {
+            transform: translateX(10px) scale(1.05);
+            box-shadow: 0 0 40px var(--glow-secondary), inset 0 0 30px rgba(0, 212, 255, 0.15);
+            border-color: #00ff9f;
+        }
+
+        .task-orb.completed {
+            opacity: 0.4;
+            border-color: var(--success);
+            text-decoration: line-through;
+        }
+
+        .task-text {
+            color: var(--text);
+            font-size: 13px;
+            margin-bottom: 8px;
+            word-break: break-word;
+        }
+
+        .task-priority {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 6px;
+        }
+
+        .priority-high {
+            background: rgba(255, 51, 102, 0.3);
+            color: #ff3366;
+            border: 1px solid #ff3366;
+        }
+
+        .priority-med {
+            background: rgba(255, 149, 0, 0.3);
+            color: #ff9500;
+            border: 1px solid #ff9500;
+        }
+
+        .priority-low {
+            background: rgba(0, 255, 136, 0.3);
+            color: #00ff88;
+            border: 1px solid #00ff88;
+        }
+
+        .constellation-panel {
+            position: fixed;
+            top: 120px;
+            right: 40px;
+            width: 380px;
+            height: 300px;
+            background: rgba(15, 21, 53, 0.85);
+            border: 2px solid var(--glow-primary);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px var(--glow-primary), inset 0 0 30px rgba(0, 255, 159, 0.1);
+            z-index: 150;
+        }
+
+        #constellation-canvas {
+            width: 100%;
+            height: calc(100% - 40px);
+            cursor: pointer;
+        }
+
+        .stats-widget {
+            position: fixed;
+            bottom: 160px;
+            right: 40px;
+            background: rgba(15, 21, 53, 0.85);
+            border: 2px solid var(--glow-secondary);
+            border-radius: 8px;
+            padding: 16px;
+            min-width: 250px;
+            box-shadow: 0 0 30px var(--glow-secondary);
+            z-index: 150;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #00d4ff;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 16px;
+            font-weight: bold;
+            color: #00ff9f;
+        }
+
+        .biometric-indicator {
+            position: fixed;
+            bottom: 160px;
+            left: 40px;
+            width: 100px;
+            height: 100px;
+            background: rgba(15, 21, 53, 0.85);
+            border: 2px solid var(--glow-primary);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 40px var(--glow-primary);
+            z-index: 150;
+        }
+
+        .bio-heart {
+            font-size: 32px;
+            animation: heartbeat 1.5s ease-in-out infinite;
+        }
+
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            25% { transform: scale(1.2); opacity: 0.8; }
+            50% { transform: scale(1); opacity: 1; }
+        }
+
+        .bio-text {
+            font-size: 10px;
+            color: #00ff9f;
+            margin-top: 4px;
+            text-transform: uppercase;
+        }
+
+        .action-buttons {
+            position: fixed;
+            bottom: 160px;
+            left: 160px;
+            display: flex;
+            gap: 10px;
+            z-index: 200;
+        }
+
+        .action-btn {
+            padding: 10px 14px;
+            background: rgba(15, 21, 53, 0.85);
+            border: 2px solid var(--glow-primary);
+            color: var(--text);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            box-shadow: 0 0 20px var(--glow-primary);
+        }
+
+        .action-btn:hover {
+            background: rgba(0, 255, 159, 0.1);
+            box-shadow: 0 0 30px #00ff9f;
+            transform: scale(1.1);
+        }
+
+        .action-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* === AUDIO HAPTICS === */
+        .haptic-pulse {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .haptic-ripple {
+            position: absolute;
+            border: 2px solid #00ff9f;
+            border-radius: 50%;
+            opacity: 0;
+            animation: hapticRipple 0.6s ease-out;
+        }
+
+        @keyframes hapticRipple {
+            0% {
+                width: 20px;
+                height: 20px;
+                opacity: 0.8;
+            }
+            100% {
+                width: 300px;
+                height: 300px;
+                opacity: 0;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 255, 159, 0.05);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #00ff9f;
+            border-radius: 3px;
+            box-shadow: 0 0 10px #00ff9f;
+        }
+
+        /* === AUTH MODAL === */
+        .auth-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 14, 39, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            backdrop-filter: blur(10px);
+        }
+
+        .auth-modal.hidden {
+            display: none;
+        }
+
+        .auth-form-box {
+            background: rgba(15, 21, 53, 0.9);
+            border: 2px solid #00ff9f;
+            border-radius: 12px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 0 60px rgba(0, 255, 159, 0.3), inset 0 0 40px rgba(0, 255, 159, 0.1);
+        }
+
+        .auth-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff9f;
+            margin-bottom: 30px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .auth-form-group {
+            margin-bottom: 20px;
+        }
+
+        .auth-form-group label {
+            display: block;
+            font-size: 11px;
+            color: #00d4ff;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .auth-form-group input {
+            width: 100%;
+            background: rgba(10, 14, 39, 0.6);
+            border: 2px solid rgba(0, 255, 159, 0.2);
+            border-radius: 6px;
+            padding: 12px;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        .auth-form-group input:focus {
+            border-color: #00ff9f;
+            box-shadow: 0 0 20px rgba(0, 255, 159, 0.3);
+        }
+
+        .auth-form-error {
+            color: #ff3366;
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        .auth-btn {
+            flex: 1;
+            padding: 12px;
+            background: linear-gradient(135deg, #00ff9f, #00d4ff);
+            border: none;
+            border-radius: 6px;
+            color: #0a0e27;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 159, 0.3);
+        }
+
+        .auth-btn:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 159, 0.6);
+            transform: scale(1.05);
+        }
+
+        .auth-btn:active {
+            transform: scale(0.95);
+        }
+
+        .auth-toggle {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .auth-toggle button {
+            background: none;
+            border: none;
+            color: #00ff9f;
+            cursor: pointer;
+            font-weight: bold;
+            text-decoration: underline;
+            transition: color 0.3s ease;
+        }
+
+        .auth-toggle button:hover {
+            color: #00d4ff;
+        }
+
+        @media (max-width: 1024px) {
+            .tasks-list-panel {
+                width: 90%;
+                left: 50%;
+                transform: translateX(-50%);
+                top: 100px;
+            }
+
+            .constellation-panel {
+                width: 90%;
+                left: 50%;
+                transform: translateX(-50%);
+                right: auto;
+                top: 450px;
+            }
+
+            .biometric-indicator {
+                bottom: 280px;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+
+            .stats-widget {
+                bottom: 280px;
+                right: auto;
+                left: 50%;
+                transform: translateX(-50%);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- AUTH MODAL -->
+    <div class="auth-modal" id="authModal">
+        <div class="auth-form-box">
+            <div class="auth-title">⟡ ADI SYSTEM LOGIN ⟡</div>
+            <form onsubmit="app.handleAuth(event)" novalidate>
+                <div class="auth-form-group">
+                    <label for="authEmail">Email Address</label>
+                    <input type="email" id="authEmail" placeholder="user@example.com" required>
+                    <div class="auth-form-error" id="emailError"></div>
+                </div>
+                <div class="auth-form-group">
+                    <label for="authPassword">Password</label>
+                    <input type="password" id="authPassword" placeholder="passcode" required>
+                    <div class="auth-form-error" id="passwordError"></div>
+                </div>
+                <div class="auth-buttons">
+                    <button type="submit" class="auth-btn" id="authSubmitBtn">AUTHENTICATE</button>
+                </div>
+                <div class="auth-toggle">
+                    <span id="authToggleText">No account yet? </span>
+                    <button type="button" onclick="app.toggleAuthMode()">Create One</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- BOOT SEQUENCE -->
+    <div class="boot-container" id="bootContainer">
+        <div class="neural-logo">
+            <canvas id="neuralLogoCanvas"></canvas>
+        </div>
+        <div class="boot-text">
+            <div id="bootStatus"></div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+        </div>
+        <div class="big-bang" id="bigBang"></div>
+    </div>
+
+    <!-- UNIVERSE CANVAS -->
+    <canvas id="universe-canvas"></canvas>
+
+    <!-- HUD INTERFACE -->
+    <div class="orbital-hud">
+        <!-- Brand -->
+        <div class="adi-brand">⟡ TASK WITH ADI ⟡</div>
+
+        <!-- Tasks List Panel -->
+        <div class="tasks-list-panel">
+            <div class="hud-panel">
+                <div class="hud-title">► Active Tasks</div>
+                <div id="tasksList"></div>
+            </div>
+        </div>
+
+        <!-- Constellation Panel -->
+        <div class="constellation-panel">
+            <div class="hud-title">☆ Achievement Constellation</div>
+            <canvas id="constellation-canvas"></canvas>
+        </div>
+
+        <!-- Biometric Indicator -->
+        <div class="biometric-indicator">
+            <div class="bio-heart" id="bioHeart">♥</div>
+            <div class="bio-text" id="bioStatus">OPTIMAL</div>
+        </div>
+
+        <!-- Stats Widget -->
+        <div class="stats-widget">
+            <div class="stat-item">
+                <span class="stat-label">Total Tasks</span>
+                <span class="stat-value" id="statTotal">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Completed</span>
+                <span class="stat-value" id="statCompleted">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">In Progress</span>
+                <span class="stat-value" id="statInProgress">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Productivity</span>
+                <span class="stat-value" id="statProd">0%</span>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button class="action-btn" onclick="app.addTaskViaButton()" title="Add new task (⌘+N)">⟡ New</button>
+            <button class="action-btn" onclick="app.toggleAmbience()" title="Toggle ambient music">🔊 Music</button>
+            <button class="action-btn" onclick="app.resetConstellation()" title="Reset stars">✦ Reset</button>
+            <button class="action-btn" onclick="app.logout()" title="Exit system">⊗ Logout</button>
+        </div>
+
+        <!-- Task Input Panel -->
+        <div class="task-input-panel">
+            <input 
+                type="text" 
+                id="taskInput" 
+                class="task-input-field" 
+                placeholder="[INPUT] ENTER_NEW_TASK_SEQUENCE... (Press Enter)" 
+                autocomplete="off"
+            >
+        </div>
+    </div>
+
+    <script>
+        // ==================== SINGULARITY ENGINE ====================
+        const API_BASE = 'http://localhost:5000/api';
+        let socket = null;
+
+        // Perlin Noise for procedural generation
+        const perlin = new SimplexNoise();
+
+        // Web Audio Context for ambient music and haptics
+        let audioContext = null;
+        let masterGain = null;
+        let isMusicPlaying = false;
+        let oscillators = [];
+
+        class SingularityApp {
+            constructor() {
+                this.tasks = [];
+                this.completedTasks = [];
+                this.stars = [];
+                this.token = null;
+                this.userId = null;
+                this.email = null;
+                this.isLoggedIn = false;
+                this.isDarkMode = true;
+                this.mouseX = 0;
+                this.mouseY = 0;
+                this.taskCompletionRate = 0;
+                this.isLoginMode = true;
+
+                this.initBoot();
+                this.setupEventListeners();
+            }
+
+            initBoot() {
+                this.bootSequence();
+            }
+
+            async bootSequence() {
+                const statusEl = document.getElementById('bootStatus');
+                const statuses = [
+                    'CALIBRATING_OPTIC_NERVE',
+                    'SYNCING_SATELLITE_LATENCY',
+                    'INITIALIZING_NEURAL_PATHWAYS',
+                    'STREAMING_CONSTELLATION_DATA',
+                    'ACTIVATING_HOLOGRAPHIC_MATRIX',
+                    'ADI_COGNITION_ONLINE'
+                ];
+
+                for (let i = 0; i < statuses.length; i++) {
+                    const line = document.createElement('div');
+                    line.className = 'status-line';
+                    line.textContent = `> ${statuses[i]}`;
+                    line.style.animationDelay = `${i * 0.5}s`;
+                    statusEl.appendChild(line);
+                    await new Promise(r => setTimeout(r, 500));
+                }
+
+                // Big Bang effect
+                await new Promise(r => setTimeout(r, 500));
+                const bigBang = document.getElementById('bigBang');
+                bigBang.classList.add('active');
+
+                // Initialize systems
+                await new Promise(r => setTimeout(r, 800));
+                this.initializeOrbitalEngine();
+                this.checkAuth();
+                document.getElementById('bootContainer').classList.add('hidden');
+            }
+
+            initializeOrbitalEngine() {
+                // Setup Three.js scene for Earth
+                const canvas = document.getElementById('universe-canvas');
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+                const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x0a0e27, 1);
+                camera.position.z = 3;
+
+                // Create Earth
+                const earthGeometry = new THREE.IcosahedronGeometry(2, 64);
+                
+                // Create custom shader material for Earth with atmosphere
+                const earthMaterial = new THREE.ShaderMaterial({
+                    uniforms: {
+                        texTime: { value: 0 },
+                        completionRate: { value: 0 }
+                    },
+                    vertexShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        void main() {
+                            vNormal = normalize(normalMatrix * normal);
+                            vPosition = position;
+                            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        }
+                    `,
+                    fragmentShader: `
+                        varying vec3 vNormal;
+                        varying vec3 vPosition;
+                        uniform float texTime;
+                        uniform float completionRate;
+
+                        // Simplex noise function
+                        float noise(vec3 p) {
+                            return sin(p.x * 10.0 + texTime) * cos(p.y * 10.0) * sin(p.z * 10.0);
+                        }
+
+                        void main() {
+                            vec3 normal = normalize(vNormal);
+                            float lighting = dot(normal, normalize(vec3(1.0, 1.0, 1.0)));
+                            
+                            // Base Earth color
+                            vec3 baseColor = vec3(0.0, 0.5, 0.8);
+                            
+                            // Health-based color shift
+                            if (completionRate > 0.7) {
+                                baseColor = mix(baseColor, vec3(0.0, 1.0, 0.3), 0.4);
+                            } else if (completionRate < 0.3) {
+                                baseColor = mix(baseColor, vec3(0.7, 0.2, 1.0), 0.4);
+                            }
+
+                            // Atmosphere glow
+                            float rim = pow(1.0 - abs(dot(normal, vec3(0.0, 0.0, 1.0))), 3.0);
+                            vec3 rimColor = mix(vec3(1.0, 0.4, 0.0), vec3(0.0, 1.0, 0.5), completionRate);
+                            
+                            vec3 finalColor = mix(baseColor * lighting, rimColor, rim * 0.5);
+                            gl_FragColor = vec4(finalColor, 1.0);
+                        }
+                    `
+                });
+
+                const earth = new THREE.Mesh(earthGeometry, earthMaterial);
+                scene.add(earth);
+
+                // Add stars
+                const starsGeometry = new THREE.BufferGeometry();
+                const starPositions = [];
+                for (let i = 0; i < 500; i++) {
+                    starPositions.push((Math.random() - 0.5) * 200);
+                    starPositions.push((Math.random() - 0.5) * 200);
+                    starPositions.push((Math.random() - 0.5) * 200);
+                }
+                starsGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(starPositions), 3));
+                const starsMaterial = new THREE.PointsMaterial({ color: 0x00ff9f, size: 0.3 });
+                const stars = new THREE.Points(starsGeometry, starsMaterial);
+                scene.add(stars);
+
+                // Animation loop
+                const animate = () => {
+                    requestAnimationFrame(animate);
+                    earth.rotation.x += 0.0003;
+                    earth.rotation.y += 0.0005;
+                    stars.rotation.x += 0.00005;
+                    stars.rotation.y += 0.0001;
+
+                    earthMaterial.uniforms.texTime.value += 0.01;
+                    earthMaterial.uniforms.completionRate.value = this.taskCompletionRate;
+
+                    renderer.render(scene, camera);
+                };
+
+                animate();
+
+                window.addEventListener('resize', () => {
+                    camera.aspect = window.innerWidth / window.innerHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+
+                this.earth = earth;
+                this.renderer = renderer;
+                this.scene = scene;
+            }
+
+            setupEventListeners() {
+                const taskInput = document.getElementById('taskInput');
+                taskInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.addTask(taskInput.value);
+                        taskInput.value = '';
+                        this.playHapticFeedback(0, 0.1, 100);
+                        this.playClickSound();
+                    }
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    this.mouseX = e.clientX / window.innerWidth;
+                    this.mouseY = e.clientY / window.innerHeight;
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.metaKey || e.ctrlKey) {
+                        if (e.key === 'n') {
+                            e.preventDefault();
+                            document.getElementById('taskInput').focus();
+                        }
+                    }
+                });
+            }
+
+            checkAuth() {
+                const token = localStorage.getItem('tm_token');
+                const userId = localStorage.getItem('tm_userId');
+                const email = localStorage.getItem('tm_email');
+
+                if (token && userId && email) {
+                    this.token = token;
+                    this.userId = userId;
+                    this.email = email;
+                    this.isLoggedIn = true;
+                    this.loadTasks();
+                    this.connectWebSocket();
+                    this.initAudio();
+                } else {
+                    this.showLoginPrompt();
+                }
+            }
+
+            async loadTasks() {
+                try {
+                    const response = await fetch(`${API_BASE}/tasks/${this.userId}`, {
+                        headers: { 'Authorization': `Bearer ${this.token}` }
+                    });
+                    this.tasks = await response.json();
+                    this.completedTasks = this.tasks.filter(t => t.completed);
+                    this.updateConstellation();
+                    this.updateStats();
+                    this.renderTasks();
+                } catch (err) {
+                    console.error('Load error:', err);
+                }
+            }
+
+            connectWebSocket() {
+                socket = io(API_BASE, { auth: { token: this.token } });
+                socket.on('task-created', (data) => {
+                    if (data.userId === this.userId) {
+                        this.tasks.unshift(data);
+                        this.updateConstellation();
+                        this.renderTasks();
+                    }
+                });
+            }
+
+            addTask(content) {
+                if (!content.trim()) return;
+
+                fetch(`${API_BASE}/tasks/${this.userId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({ content })
+                }).then(r => r.json()).then(task => {
+                    this.tasks.unshift(task);
+                    this.updateConstellation();
+                    this.renderTasks();
+                    confetti({ particleCount: 50, spread: 60 });
+                });
+            }
+
+            addTaskViaButton() {
+                const input = document.getElementById('taskInput');
+                this.addTask(input.value);
+                input.value = '';
+                input.focus();
+            }
+
+            renderTasks() {
+                const container = document.getElementById('tasksList');
+                container.innerHTML = this.tasks.slice(0, 8).map(task => `
+                    <div class="task-orb ${task.completed ? 'completed' : ''}" data-id="${task._id}">
+                        <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+                            <input type="checkbox" ${task.completed ? 'checked' : ''} 
+                                   onchange="app.toggleTask('${task._id}', this.checked)" 
+                                   style="cursor: pointer;">
+                            <span class="task-priority priority-${task.priority || 'low'}">
+                                ${task.priority ? task.priority.toUpperCase() : 'LOW'}
+                            </span>
+                        </div>
+                        <div class="task-text">${task.content}</div>
+                        <button onclick="app.deleteTask('${task._id}')" style="background: none; border: none; color: #ff3366; cursor: pointer; font-size: 10px; margin-top: 6px;">✕ DELETE</button>
+                    </div>
+                `).join('');
+            }
+
+            toggleTask(taskId, completed) {
+                fetch(`${API_BASE}/tasks/${this.userId}/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({ completed, status: completed ? 'done' : 'todo' })
+                }).then(r => r.json()).then(task => {
+                    const index = this.tasks.findIndex(t => t._id === taskId);
+                    if (index !== -1) this.tasks[index] = task;
+                    this.completedTasks = this.tasks.filter(t => t.completed);
+                    this.updateConstellation();
+                    this.updateStats();
+                    this.renderTasks();
+
+                    if (completed) {
+                        confetti({ particleCount: 100, spread: 80, colors: ['#00ff9f', '#00d4ff'] });
+                        this.playSuccessSound();
+                    }
+                });
+            }
+
+            deleteTask(taskId) {
+                fetch(`${API_BASE}/tasks/${this.userId}/${taskId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${this.token}` }
+                }).then(() => {
+                    this.tasks = this.tasks.filter(t => t._id !== taskId);
+                    this.renderTasks();
+                });
+            }
+
+            updateConstellation() {
+                const constellationCanvas = document.getElementById('constellation-canvas');
+                if (!constellationCanvas) return;
+
+                const ctx = constellationCanvas.getContext('2d');
+                ctx.fillStyle = '#0a0e27';
+                ctx.fillRect(0, 0, constellationCanvas.width, constellationCanvas.height);
+
+                const completed = this.completedTasks.length;
+                const positions = [];
+
+                // Generate star positions based on task history
+                for (let i = 0; i < completed; i++) {
+                    const angle = (i / (completed + 1)) * Math.PI * 2;
+                    const radius = 50 + (i % 3) * 20;
+                    positions.push({
+                        x: constellationCanvas.width / 2 + Math.cos(angle) * radius,
+                        y: constellationCanvas.height / 2 + Math.sin(angle) * radius
+                    });
+                }
+
+                // Draw constellation lines
+                ctx.strokeStyle = 'rgba(0, 255, 159, 0.3)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < positions.length - 1; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(positions[i].x, positions[i].y);
+                    ctx.lineTo(positions[i + 1].x, positions[i + 1].y);
+                    ctx.stroke();
+                }
+
+                // Draw stars
+                positions.forEach((pos, i) => {
+                    const brightness = 0.3 + (i / completed) * 0.7;
+                    ctx.fillStyle = `rgba(0, 255, 159, ${brightness})`;
+                    ctx.beginPath();
+                    ctx.arc(pos.x, pos.y, 3 + Math.sin(Date.now() / 1000 + i) * 2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = `rgba(0, 212, 255, ${brightness * 0.5})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+
+                this.stars = positions;
+            }
+
+            updateStats() {
+                const total = this.tasks.length;
+                const completed = this.completedTasks.length;
+                const inProgress = this.tasks.filter(t => t.status === 'in-progress').length;
+                const productivity = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+                this.taskCompletionRate = productivity / 100;
+
+                document.getElementById('statTotal').textContent = total;
+                document.getElementById('statCompleted').textContent = completed;
+                document.getElementById('statInProgress').textContent = inProgress;
+                document.getElementById('statProd').textContent = `${productivity}%`;
+
+                // Update biometric indicator
+                const bioStatus = document.getElementById('bioStatus');
+                if (productivity > 70) {
+                    bioStatus.textContent = 'THRIVING';
+                } else if (productivity > 40) {
+                    bioStatus.textContent = 'STABLE';
+                } else {
+                    bioStatus.textContent = 'CAUTION';
+                }
+
+                // Update music tempo based on productivity
+                if (isMusicPlaying) {
+                    this.updateMusicTempo(productivity);
+                }
+            }
+
+            initAudio() {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    masterGain = audioContext.createGain();
+                    masterGain.gain.value = 0.3;
+                    masterGain.connect(audioContext.destination);
+                }
+            }
+
+            toggleAmbience() {
+                if (isMusicPlaying) {
+                    this.stopAmbience();
+                } else {
+                    this.playAmbience();
+                }
+            }
+
+            playAmbience() {
+                if (!audioContext) this.initAudio();
+                isMusicPlaying = true;
+
+                const frequencies = [130.81, 164.81, 196.00, 246.94]; // C3, E3, G3, B3
+                frequencies.forEach((freq, i) => {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    osc.frequency.value = freq;
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                    osc.connect(gain);
+                    gain.connect(masterGain);
+                    osc.start();
+                    oscillators.push(osc);
+
+                    setTimeout(() => {
+                        if (Math.random() > 0.3) {
+                            osc.frequency.setTargetAtTime(freq * 1.5, audioContext.currentTime, 0.5);
+                        }
+                    }, i * 200);
+                });
+            }
+
+            stopAmbience() {
+                oscillators.forEach(osc => {
+                    try {
+                        osc.stop();
+                    } catch (e) {}
+                });
+                oscillators = [];
+                isMusicPlaying = false;
+            }
+
+            updateMusicTempo(productivity) {
+                // Adjust playback rate based on productivity
+                // (Would require Web Audio API scheduling)
+            }
+
+            playClickSound() {
+                if (!audioContext) this.initAudio();
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.frequency.setValueAtTime(800, audioContext.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+                osc.connect(gain);
+                gain.connect(masterGain);
+                osc.start();
+                osc.stop(audioContext.currentTime + 0.1);
+            }
+
+            playSuccessSound() {
+                if (!audioContext) this.initAudio();
+                const notes = [523.25, 659.25, 783.99];
+                notes.forEach((freq, i) => {
+                    setTimeout(() => {
+                        const osc = audioContext.createOscillator();
+                        const gain = audioContext.createGain();
+                        osc.frequency.value = freq;
+                        gain.gain.setValueAtTime(0.1, audioContext.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.2);
+                        osc.connect(gain);
+                        gain.connect(masterGain);
+                        osc.start();
+                        osc.stop(audioContext.currentTime + 0.2);
+                    }, i * 100);
+                });
+            }
+
+            playHapticFeedback(x, y, duration) {
+                const container = document.querySelector('.haptic-pulse');
+                const ripple = document.createElement('div');
+                ripple.className = 'haptic-ripple';
+                ripple.style.left = `${x}px`;
+                ripple.style.top = `${y}px`;
+                container.appendChild(ripple);
+                setTimeout(() => ripple.remove(), duration);
+
+                // Trigger device haptics if available
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+            }
+
+            resetConstellation() {
+                this.completedTasks = [];
+                this.updateConstellation();
+                this.updateStats();
+            }
+
+            logout() {
+                localStorage.removeItem('tm_token');
+                localStorage.removeItem('tm_userId');
+                localStorage.removeItem('tm_email');
+                location.reload();
+            }
+
+            showLoginPrompt() {
+                document.getElementById('authModal').classList.remove('hidden');
+            }
+
+            toggleAuthMode() {
+                this.isLoginMode = !this.isLoginMode;
+                const title = document.querySelector('.auth-title');
+                const btn = document.getElementById('authSubmitBtn');
+                const toggleText = document.getElementById('authToggleText');
+                
+                if (this.isLoginMode) {
+                    title.textContent = '⟡ ADI SYSTEM LOGIN ⟡';
+                    btn.textContent = 'AUTHENTICATE';
+                    toggleText.textContent = 'No account yet? ';
+                } else {
+                    title.textContent = '⟡ CREATE ACCOUNT ⟡';
+                    btn.textContent = 'REGISTER';
+                    toggleText.textContent = 'Already have one? ';
+                }
+                document.getElementById('emailError').textContent = '';
+                document.getElementById('passwordError').textContent = '';
+            }
+
+            async handleAuth(e) {
+                e.preventDefault();
+                const email = document.getElementById('authEmail').value.trim();
+                const password = document.getElementById('authPassword').value.trim();
+                const emailError = document.getElementById('emailError');
+                const passwordError = document.getElementById('passwordError');
+                const submitBtn = document.getElementById('authSubmitBtn');
+
+                emailError.textContent = '';
+                passwordError.textContent = '';
+
+                if (!email) {
+                    emailError.textContent = 'Email required';
+                    return;
+                }
+                if (!password) {
+                    passwordError.textContent = 'Password required';
+                    return;
+                }
+                if (!this.isLoginMode && password.length < 6) {
+                    passwordError.textContent = 'Min 6 characters';
+                    return;
+                }
+
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'PROCESSING...';
+
+                try {
+                    const endpoint = this.isLoginMode ? '/auth/login' : '/auth/register';
+                    const response = await fetch(`${API_BASE}${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        emailError.textContent = data.message || 'Auth failed';
+                        return;
+                    }
+
+                    this.token = data.token;
+                    this.userId = data.userId;
+                    this.email = data.email;
+                    this.isLoggedIn = true;
+
+                    localStorage.setItem('tm_token', this.token);
+                    localStorage.setItem('tm_userId', this.userId);
+                    localStorage.setItem('tm_email', this.email);
+
+                    document.getElementById('authModal').classList.add('hidden');
+                    this.loadTasks();
+                    this.connectWebSocket();
+                    this.initAudio();
+                    confetti({ particleCount: 50, spread: 80 });
+                } catch (err) {
+                    emailError.textContent = err.message || 'Connection error';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = this.isLoginMode ? 'AUTHENTICATE' : 'REGISTER';
+                }
+            }
+        }
+
+        // Initialize app
+        const app = new SingularityApp();
+
+        // Haptic pulse container
+        const pulseContainer = document.createElement('div');
+        pulseContainer.className = 'haptic-pulse';
+        document.body.appendChild(pulseContainer);
+    </script>
+</body>
+</html>
